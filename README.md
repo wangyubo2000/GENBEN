@@ -1,1 +1,1 @@
-The first step, you can unzip data.zip and save it in the current directory.
+# GenBen: A Benchmark for LLM-Aided Design
