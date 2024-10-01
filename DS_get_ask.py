@@ -20,8 +20,8 @@ requests_filepath = './save_data/descriptions_test_golden_top_debug_code.jsonl'
 
 sva_dir = './save_data' # 修改-> 提供生成路径
 os.makedirs(sva_dir, exist_ok=True)
-done_filepath = os.path.join(sva_dir, 'description_ds_code_debug_done_gpt35.jsonl')
-undone_filepath = os.path.join(sva_dir, 'description_ds_code_debug_undone_gpt35.jsonl')
+done_filepath = os.path.join(sva_dir, 'description_top_debug_code_done_gpt4.jsonl')
+undone_filepath = os.path.join(sva_dir, 'description_top_debug_code_undone_gpt4.jsonl')
 log_filepath = os.path.join(sva_dir, 'description.log')
 
 run_config = {
@@ -35,13 +35,13 @@ run_config = {
     "max_attempts": 2,
     "interval_time": 0.2,
     "logging_level": logging.INFO,
-    "model": "gpt-3.5-turbo",
+    "model": "gpt-4-turbo",
     #"model": "claude-3-opus-20240229",
     "temperature": 0.2
 }
 
-policy = asyncio.WindowsSelectorEventLoopPolicy()
-asyncio.set_event_loop_policy(policy)
+#policy = asyncio.WindowsSelectorEventLoopPolicy()
+#asyncio.set_event_loop_policy(policy)
 
 
 @dataclass
