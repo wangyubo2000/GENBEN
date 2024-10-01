@@ -11,6 +11,7 @@ import logging  # for logging rate limit warnings and other messages
 import time  # for sleeping after rate limit is hit
 import subprocess
 from dataclasses import dataclass, field  # for storing API inputs, outputs, and metadata
+from test_ppa import extract_total_power,extract_tns_values,get_area,make_run
 from utils.openai_client import model
 from fuzzywuzzy import fuzz
 os.environ["OPENAI_API_url"] = "https://a.fe8.cn/v1/chat/completions"
@@ -198,10 +199,15 @@ async def main(mode):
                                 request_json = dict()
                                 request_json['temperature'] = run_config['temperature']
                                 request_json["model"] = run_config['model']
-                                prompt = (
-                                    "Choose the correct answer to the following questions based on the information provided. Please output the final answer only, without providing any explanations."
-                                    f'{description.strip()}\n'
-                                    )
+                                if 'D' in task_id:
+                                    prompt = ( "Write the appropriate Verilog code and output the appropriate code as described in the following topic module. But notice that all modules are named top, eg: module top ().... endmodule\n"
+                                f'{description.strip()}\n'
+                                )
+                                else:
+                                    prompt = (
+                                        "Write the appropriate Verilog code and output the appropriate code as described in the following topic module. But notice that all modules are named top, eg: module top ().... endmodule\n"
+                                        f'{description.strip()}\n'
+                                        )
                                 request_json['messages'] = [
                                     {"role": "system",
                                      "content": "You are now a designer with extensive knowledge of hardware design."},
@@ -298,26 +304,26 @@ def get_verilog(data_path, file_path_json,file_path_debug_json):
                     # print(verilog_code)
                 else:
                     code['verilog_code'] = """
-                                        module top (out, in, clk); 
-                                            output out;
-                                            input in, clk;
-                                            reg s1, s2, s3;
+                    module top (out, in, clk); 
+                        output out;
+                        input in, clk;
+                        reg s1, s2, s3;
 
-                                            assign out = s1==0 & s2==0 & s3==0;
+                        assign out = s1==0 & s2==0 & s3==0;
 
-                                            initial begin
-                                                s1 = 0;
-                                                s2 = 0;
-                                                s3 = 0;
-                                            end
+                        initial begin
+                            s1 = 0;
+                            s2 = 0;
+                            s3 = 0;
+                        end
 
-                                            always @(posedge clk) begin
-                                                s1 <= in;
-                                                s2 <= s1;
-                                                s3 <= s2;
-                                            end
-                                        endmodule
-                                        """
+                        always @(posedge clk) begin
+                            s1 <= in;
+                            s2 <= s1;
+                            s3 <= s2;
+                        end
+                    endmodule
+                    """
                     print("No match found.")
                 json_string = json.dumps(code, ensure_ascii=False)
                 with open(file_path_json, "a+", encoding='utf-8') as f:
@@ -335,7 +341,7 @@ def debug_pass(llm_result_path, golden_result_path):
 
     total = 0
     correct = 0
-    threshold = 50
+    threshold = 60
 
     for task_id, task in llm_result.items():
         if task_id in golden_result:
@@ -369,13 +375,13 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default='gpt4o', help="model descrption")
     args = parser.parse_args()
 
-    requests_filepath = './save_data/descriptions_test_golden_choice.jsonl'  #### 描述
+    requests_filepath = 'save_data/descriptions_test_new_gpt4_golden_top_debug_code.jsonl'  #### 描述
 
     sva_dir = './save_data'  # 修改-> 提供生成路径
     os.makedirs(sva_dir, exist_ok=True)
     for i in range(5): ###### llm 发出几次指令
-        done_path = os.path.join(sva_dir, f'answer_done_choice_{args.model}_{args.mode}_parts_{i}.jsonl')  #### 保存成功结果的文件
-        undone_path = os.path.join(sva_dir, f'answer_undone_choice_{args.model}_{args.mode}_parts_{i}.jsonl')  #### 保存结果不成功的文件
+        done_path = os.path.join(sva_dir, f'answer_done_{args.model}_{args.mode}_parts_{i}.jsonl')  #### 保存成功结果的文件
+        undone_path = os.path.join(sva_dir, f'answer_undone_{args.model}_{args.mode}_parts_{i}.jsonl')  #### 保存结果不成功的文件
         log_filepath = os.path.join(sva_dir, 'description.log')
 
         run_config = {
@@ -390,7 +396,7 @@ if __name__ == "__main__":
             "interval_time": 0.2,
             "logging_level": logging.INFO,
             "model": "gpt-4o",  #### 切换模型
-            #"model": "claude-3-opus-20240229",
+            # "model": "claude-3-opus-20240229",
             "temperature": 0.9  ### 0.2-0.5需要准确性 0.7-1.0 创造性
         }
 
@@ -433,53 +439,108 @@ if __name__ == "__main__":
             APIRequest.completed_tasks = 1        #### 重置回答数 ########
         except Exception as e:
             print('main task have error:', e)
-    parts_paths = []
+    parts_paths = []    
     for i in range(5):  # 有 5 个 parts 文件
-        parts_path = os.path.join(sva_dir, f'answer_done_choice_{args.model}_{args.mode}_parts_{i}.jsonl')
+        parts_path = os.path.join(sva_dir, f'answer_ds_gpt35_done_{args.model}_{args.mode}_parts_{i}.jsonl')
         parts_paths.append(parts_path)
 
     # 最终的 done 文件路径
-    done_filepath = os.path.join(sva_dir, f'answer_done_choice_{args.model}_{args.mode}.jsonl')  ###### the answer of LLM
+    done_filepath = os.path.join(sva_dir, f'answer_ds_gpt35_done_{args.model}_{args.mode}.jsonl')  ###### the answer of LLM
     merge_done_files(done_filepath, parts_paths)
-    save_file = os.path.join('./save_data', f'eval_{args.mode}_{args.model}_code.jsonl')  ##### the answer of code generate
-    save_file_debug = os.path.join('./save_data',f'eval_{args.mode}_{args.model}_debug.jsonl')  ####### the answer of debug
+    save_file = os.path.join('./save_data', f'eval_ds_gpt35_{args.mode}_{args.model}_code.jsonl')  ##### the answer of code generate
+    save_file_debug = os.path.join('./save_data',f'eval_ds_gpt35_{args.mode}_{args.model}_debug.jsonl')  ####### the answer of debug
     ######## 直接拆分结果 ####################################
-    # get_verilog(done_filepath, save_file,save_file_debug)
-    # print('Debugging and code generation tasks are complete.')
-    # ########## 验证debug的结果 pass@5 #########################
-    # llm_result_path = save_file_debug
-    # golden_result_path = requests_filepath
-    # acc = debug_pass(llm_result_path, golden_result_path)
-    # print(f'code debug pass@5 {acc}')
-    # ######## 测试功能结果  ######################
-    # def run_command(save_file):
-    #     problem_file_path = f'save_data/descriptions_test_golden_top_code_{args.mode}.jsonl'
-    #     # Command setup
-    #     command = [
-    #         "evaluate_functional_correctness",
-    #         save_file,
-    #         f"--problem_file={problem_file_path}"
-    #     ]
-    #
-    #     try:
-    #         # Execute the command
-    #         result = subprocess.run(command, capture_output=True, text=True)
-    #
-    #         # Print the output from stdout
-    #         print("Output:\n", result.stdout)
-    #
-    #         # Check for errors and print them from stderr
-    #         if result.stderr:
-    #             print("Errors:\n", result.stderr)
-    #
-    #         # Check the exit status
-    #         if result.returncode != 0:
-    #             print("Command failed with return code:", result.returncode)
-    #         else:
-    #             print("Command executed successfully!")
-    #
-    #     except Exception as e:
-    #         print("An error occurred while running the command:", e)
-    #
-    # run_command(save_file)
-    #
+    get_verilog(done_filepath, save_file,save_file_debug)
+    print('Debugging and code generation tasks are complete.')
+    ########## 验证debug的结果 pass@5 #########################
+    llm_result_path = save_file_debug
+    golden_result_path = requests_filepath
+    acc = debug_pass(llm_result_path, golden_result_path)
+    with open(os.path.join('./save_data','debug_pass.txt'),'w') as f:
+        f.write(f'code debug pass@5 {acc}')
+    print(f'code debug pass@5 {acc}')
+#     # ######## 测试功能结果  ######################
+    def run_command(save_file):
+        problem_file_path = f'save_data/descriptions_test_golden_top_code_{args.mode}.jsonl'
+        # Command setup
+        command = [
+            "evaluate_functional_correctness",
+            save_file,
+            f"--problem_file={problem_file_path}"
+        ]
+    
+        try:
+            # Execute the command
+            result = subprocess.run(command, capture_output=True, text=True)
+    
+            # Print the output from stdout
+            print("Output:\n", result.stdout)
+    
+            # Check for errors and print them from stderr
+            if result.stderr:
+                print("Errors:\n", result.stderr)
+    
+            # Check the exit status
+            if result.returncode != 0:
+                print("Command failed with return code:", result.returncode)
+            else:
+                print("Command executed successfully!")
+    
+        except Exception as e:
+            print("An error occurred while running the command:", e)
+    
+    run_command(save_file)
+    ######################PPA#########################################
+    problem_file = save_file
+    with open(problem_file, 'r') as f:
+        f.readline()  # Read and discard the first line
+        for line in f:
+            problem = json.loads(line)  # Parse the line as JSON
+            verilog_filename = "{}.v".format(problem["task_id"])
+
+            # Write the Verilog content to a file
+            with open(verilog_filename, 'w') as verilog_file:
+                verilog_file.write(problem["verilog_code"])
+
+            # 如果 passed 为 False，则跳过该任务
+            if problem.get("passed") is False:
+                continue
+
+            # 尝试运行 make_run 函数，捕获潜在错误
+            try:
+                make_run(verilog_filename)  ######运行结果###########
+            except Exception as e:
+                print(f"Error processing {verilog_filename}: {e}")
+                continue
+            if os.path.exists(verilog_filename):
+                os.remove(verilog_filename)
+            else:
+                print(f"File {verilog_filename} not found, could not be deleted.")
+            #Initialize result dictionary for each problem
+            result = {}
+            result['task_id'] = problem["task_id"]
+
+            # Extract area from log file
+            log_file_path = './openlane_run/1-yosys-synthesis/yosys-synthesis.log'
+            result['Area'] = get_area(log_file_path)
+
+            # Extract power from the power report
+            power_file_path = './openlane_run/2-openroad-staprepnr/nom_tt_025C_1v80/power.rpt'
+            result['Power'] = extract_total_power(power_file_path)
+
+            # Extract hold TNS and setup TNS from the summary report
+            tns_file_path = './openlane_run/2-openroad-staprepnr/summary.rpt'
+            hold_tns, setup_tns = extract_tns_values(tns_file_path)
+            result['hold_tns'] = hold_tns
+            result['setup_tns'] = setup_tns
+
+            # Append the result to the results list
+            results.append(result)
+
+            #删除临时生成的 Verilog 文件
+
+    # Write all results to the output JSON file
+    with open(output_file, 'w') as output_json:
+        json.dump(results, output_json, indent=4)
+
+    print(f"Results saved to {output_file}")
